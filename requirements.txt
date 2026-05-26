@@ -1,1 +1,6 @@
-
+fastapi
+uvicorn
+yt-dlp
+python-multipart
+supabase==2.3.4
+httpx==0.24.1
