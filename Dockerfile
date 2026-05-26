@@ -1,17 +1,17 @@
-services:
-  - type: web
-    name: music-api
-    env: python
+FROM python:3.12
 
-    buildCommand: |
-      pip install -r requirements.txt
+# Install ffmpeg
+RUN apt-get update && \
+    apt-get install -y ffmpeg
 
-    startCommand: |
-      uvicorn main:app --host 0.0.0.0 --port $PORT
+# App folder
+WORKDIR /app
 
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
+# Copy files
+COPY . .
 
-      - key: SUPABASE_KEY
-        sync: false
+# Install Python packages
+RUN pip install -r requirements.txt
+
+# Start FastAPI
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port=$PORT"]
