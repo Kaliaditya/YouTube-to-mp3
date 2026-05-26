@@ -1,55 +1,40 @@
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
-from supabase import create_client
-from datetime import datetime
-import os
 import uuid
-
-# =========================
-# SUPABASE CONFIG
-# =========================
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase = create_client(
-    SUPABASE_URL,
-    SUPABASE_KEY
-)
-
-# =========================
-# FASTAPI
-# =========================
+import os
+import glob
 
 app = FastAPI()
 
-class VideoRequest(BaseModel):
+os.makedirs("downloads", exist_ok=True)
+
+class SongRequest(BaseModel):
     url: str
 
-# =========================
-# ROUTES
-# =========================
-
 @app.get("/")
-def home():
+async def home():
+
     return {
-        "message": "API Running"
+        "status": "running"
     }
 
-@app.post("/convert")
-def convert_video(data: VideoRequest):
+@app.post("/download")
+async def download_song(data: SongRequest):
 
     try:
 
-        video_url = data.url
-
         unique_id = str(uuid.uuid4())
 
+        output_template = f"downloads/{unique_id}.%(ext)s"
+
         ydl_opts = {
+
             "format": "bestaudio/best",
 
-            "outtmpl": f"{unique_id}.%(ext)s",
+            "outtmpl": output_template,
 
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
@@ -61,63 +46,31 @@ def convert_video(data: VideoRequest):
                 "youtube": {
                     "player_client": ["android"]
                 }
-            },
-
-            "quiet": True
-        }
-
-        # DOWNLOAD
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(
-                video_url,
-                download=True
-            )
-
-            title = info.get(
-                "title",
-                "Unknown"
-            )
-
-        mp3_file = f"{unique_id}.mp3"
-
-        if not os.path.exists(mp3_file):
-            return {
-                "success": False,
-                "error": "MP3 not found"
             }
 
-        storage_name = f"{unique_id}.mp3"
+        }
 
-        # UPLOAD TO SUPABASE
-        with open(mp3_file, "rb") as f:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([data.url])
 
-            supabase.storage.from_("songs").upload(
-                path=storage_name,
-                file=f,
-                file_options={
-                    "content-type": "audio/mpeg"
-                }
-            )
-
-        # PUBLIC URL
-        public_url = supabase.storage.from_("songs").get_public_url(
-            storage_name
+        mp3_files = glob.glob(
+            f"downloads/{unique_id}*.mp3"
         )
 
-        # SAVE DATABASE
-        supabase.table("songs").insert({
-            "title": title,
-            "file_url": public_url,
-            "created_at": datetime.utcnow().isoformat()
-        }).execute()
+        if not mp3_files:
 
-        # DELETE LOCAL FILE
-        os.remove(mp3_file)
+            return {
+                "success": False
+            }
+
+        filename = os.path.basename(mp3_files[0])
 
         return {
+
             "success": True,
-            "title": title,
-            "url": public_url
+
+            "download_url": f"/file/{filename}"
+
         }
 
     except Exception as e:
@@ -125,4 +78,15 @@ def convert_video(data: VideoRequest):
         return {
             "success": False,
             "error": str(e)
-  }
+        }
+
+@app.get("/file/{filename}")
+async def get_file(filename: str):
+
+    path = f"downloads/{filename}"
+
+    return FileResponse(
+        path,
+        media_type="audio/mpeg",
+        filename=filename
+        )
