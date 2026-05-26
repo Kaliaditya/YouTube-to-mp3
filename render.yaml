@@ -1,17 +1,11 @@
-FROM python:3.12
 
-# Install ffmpeg
-RUN apt-get update && \
-    apt-get install -y ffmpeg
+services:
+  - type: web
+    name: music-api
+    runtime: python
 
-# App folder
-WORKDIR /app
+    buildCommand: |
+      pip install -r requirements.txt
 
-# Copy files
-COPY . .
-
-# Install Python packages
-RUN pip install -r requirements.txt
-
-# Start FastAPI
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port=$PORT"]
+    startCommand: |
+      uvicorn main:app --host 0.0.0.0 --port 10000
